@@ -43,6 +43,7 @@ from langchain.prompts import (
     PromptTemplate,
 )
 from langchain.sql_database import SQLDatabase
+from langchain.es_engine import ESEngine
 from langchain.utilities.arxiv import ArxivAPIWrapper
 from langchain.utilities.google_search import GoogleSearchAPIWrapper
 from langchain.utilities.google_serper import GoogleSerperAPIWrapper
@@ -114,4 +115,5 @@ __all__ = [
     "QAWithSourcesChain",
     "PALChain",
     "LlamaCpp",
+    "ESEngine",
 ]
