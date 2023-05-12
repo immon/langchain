@@ -9,18 +9,6 @@ from typing import Any, Iterable, List, Optional
 from elasticsearch import Elasticsearch, NotFoundError
 from typing import List, Optional
 
-def _format_index(index_info):
-    result = ""
-    for index, info in index_info.items():
-        result += f"Index: {index}\n"
-        mappings = info.get("mappings", {})
-        properties = mappings.get("properties", {})
-        result += "Fields:\n"
-        for field, details in properties.items():
-            result += f"  {field}: {details.get('type', 'N/A')}\n"
-        result += "\n"
-    return result
-
 def find_fields(mapping, current_path=[]):
     all_fields = {}
     def _find_fields(mapping, current_path=[]):
@@ -137,14 +125,43 @@ class ESEngine:
         """Information about all indices in Elasticsearch."""
         return self.get_index_info()
     
-    def get_index_info(self, indices_names: Optional[List[str]] = None) -> str:
-        # TODO FIX it
-        return _format_index(index_names)
+    def get_index_info(self, index_names: Optional[List[str]] = None) -> str:
+        """
+    This function retrieves and formats the information about specified indices from the Elasticsearch instance.
+    If no indices are specified, it retrieves information for all usable indices.
+    For each index, it gets the fields and a sample of documents.
+        """
 
-    def _get_sample_docs(self, index_name: str) -> dict:
-        #result = self._es.search(index=index_name, size=1)
-        #return result['hits']['hits'][0]['_source'] if result['hits']['hits'] else {}
+        all_index_names = self.get_usable_index_names()
+        if index_names is not None:
+            missing_indices = set(index_names).difference(all_index_names)
+            if missing_indices:
+                raise ValueError(f"index_names {missing_indices} not found in database")
+            all_index_names = index_names
 
+        indices_description = []
+        for index in all_index_names:
+            if self._custom_index_info and index in self._custom_index_info:
+                indices_description.append(self._custom_index_info[index])
+                continue
+
+            # Dump index name and fields
+            index_info = f"Index: {index}\nFields: {self.get_index_fields(index_name=index)}\n"
+
+            has_extra_info = (
+                self._sample_docs_in_index_info > 0
+            )
+            if has_extra_info:
+                sample_docs = self._get_sample_docs(index)
+                if sample_docs:
+                    index_info += "\n/*\nSample documents:\n"
+                    index_info += "\n".join(map(lambda d: f"{d}", sample_docs))
+                    index_info += "\n*/"
+            indices_description.append(index_info)
+        final_str = "\n\n".join(indices_description)
+        return final_str
+
+    def _get_sample_docs(self, index_name: str) -> list:
         # Search for documents in the specified index
         response = self._connection.search(
             index=index_name,
