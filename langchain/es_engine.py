@@ -21,6 +21,20 @@ def _format_index(index_info):
         result += "\n"
     return result
 
+def find_fields(mapping, current_path=[]):
+    all_fields = {}
+    def _find_fields(mapping, current_path=[]):
+        for key, value in mapping.items():
+            if isinstance(value, dict):
+                if "properties" in value:
+                    _find_fields(value["properties"], current_path + [key])
+                elif "type" in value:
+                    all_fields[".".join(current_path + [key])] = value["type"]
+                    if "fields" in value:
+                        _find_fields(value["fields"], current_path + [key])
+    _find_fields(mapping)
+    return all_fields
+    
 class ESEngine:
     """Elasticsearch wrapper around a datastore."""
 
@@ -167,9 +181,11 @@ class ESEngine:
     '''
 
     def get_index_mapping(self, index_name: str) -> dict:
-        return self._connection.indices.get_mapping(index=index_name)
+        response = self._connection.indices.get_mapping(index=index_name)
+        return response
 
-    def get_index_fields(self, index_name: str) -> List[str]:
+    def get_index_fields(self, index_name: str) -> dict:
         mapping = self.get_index_mapping(index_name)
-        return list(mapping[index_name]['mappings']['properties'].keys())
-
+        mapping = mapping.get(index_name, {}).get("mappings", {}).get("properties", {})
+        all_fields = find_fields(mapping)
+        return all_fields
