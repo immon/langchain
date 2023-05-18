@@ -40,7 +40,7 @@ DECIDER_PROMPT = PromptTemplate(
 )
 
 
-_elasticsearch_prompt = """You are an Elasticsearch expert. Given an input question, first create a syntactically correct Elasticsearch DSL query to run, then look at the results of the query and return the answer to the input question.
+_es_dsl_prompt = """You are an Elasticsearch expert. Given an input question, first create a syntactically correct Elasticsearch DSL query to run, then look at the results of the query and return the answer to the input question.
 Unless the user specifies in the question a specific number of examples to obtain, query for at most {top_k} results using the "size" parameter in Elasticsearch DSL. You can order the results to return the most informative data in the database using the "sort" parameter.
 Never query for all fields from an index. You must query only the fields that are needed to answer the question.
 Pay attention to use only the field names you can see in the indices below. Be careful to not query for fields that do not exist. Also, pay attention to which field is in which index.
@@ -57,11 +57,11 @@ Only use the following indices:
 
 Question: {input}"""
 
-ELASTICSEARCH_PROMPT = PromptTemplate(
+ES_DSL_PROMPT = PromptTemplate(
     input_variables=["input", "index_info", "top_k"],
-    template=_elasticsearch_prompt,
+    template=_es_dsl_prompt,
 )
 
 PROMPTS = {
- "elasticsearch": ELASTICSEARCH_PROMPT
+ "es_dsl": ES_DSL_PROMPT
 }

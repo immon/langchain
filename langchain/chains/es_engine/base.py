@@ -1,4 +1,4 @@
-"""Chain for interacting with SQL Database."""
+"""Chain for interacting with ElasticSearch."""
 from __future__ import annotations
 
 import warnings
@@ -10,29 +10,29 @@ from langchain.base_language import BaseLanguageModel
 from langchain.callbacks.manager import CallbackManagerForChainRun
 from langchain.chains.base import Chain
 from langchain.chains.llm import LLMChain
-from langchain.chains.sql_database.prompt import DECIDER_PROMPT, PROMPT, PROMPTS
+from langchain.chains.es_engine.prompt import DECIDER_PROMPT, PROMPT, PROMPTS
 from langchain.prompts.base import BasePromptTemplate
-from langchain.sql_database import SQLDatabase
+from langchain.es_engine import ESEngine
 
 
-class SQLDatabaseChain(Chain):
-    """Chain for interacting with SQL Database.
+class ESChain(Chain):
+    """Chain for interacting with Elasticsearch.
 
     Example:
         .. code-block:: python
 
-            from langchain import SQLDatabaseChain, OpenAI, SQLDatabase
-            db = SQLDatabase(...)
-            db_chain = SQLDatabaseChain.from_llm(OpenAI(), db)
+            from langchain import ESChain, OpenAI, ESEngine
+            engine = ESEngine(...)
+            es_chain = ESChain.from_llm(OpenAI(), engine)
     """
 
     llm_chain: LLMChain
     llm: Optional[BaseLanguageModel] = None
     """[Deprecated] LLM wrapper to use."""
-    database: SQLDatabase = Field(exclude=True)
-    """SQL Database to connect to."""
+    engine: ESEngine = Field(exclude=True)
+    """Elasticsearch to connect to."""
     prompt: Optional[BasePromptTemplate] = None
-    """[Deprecated] Prompt to use to translate natural language to SQL."""
+    """[Deprecated] Prompt to use to translate natural language to DSL."""
     top_k: int = 5
     """Number of results to return from the query"""
     input_key: str = "query"  #: :meta private:
@@ -40,7 +40,7 @@ class SQLDatabaseChain(Chain):
     return_intermediate_steps: bool = False
     """Whether or not to return the intermediate steps along with the final answer."""
     return_direct: bool = False
-    """Whether or not to return the result of querying the SQL table directly."""
+    """Whether or not to return the result of querying the index directly."""
 
     class Config:
         """Configuration for this pydantic object."""
@@ -52,14 +52,14 @@ class SQLDatabaseChain(Chain):
     def raise_deprecation(cls, values: Dict) -> Dict:
         if "llm" in values:
             warnings.warn(
-                "Directly instantiating an SQLDatabaseChain with an llm is deprecated. "
+                "Directly instantiating an ESChain with an llm is deprecated. "
                 "Please instantiate with llm_chain argument or using the from_llm "
                 "class method."
             )
             if "llm_chain" not in values and values["llm"] is not None:
-                database = values["database"]
-                prompt = values.get("prompt") or SQL_PROMPTS.get(
-                    database.dialect, PROMPT
+                engine = values["engine"]
+                prompt = values.get("prompt") or PROMPTS.get(
+                    "es_dsl", PROMPT
                 )
                 values["llm_chain"] = LLMChain(llm=values["llm"], prompt=prompt)
         return values
@@ -89,34 +89,34 @@ class SQLDatabaseChain(Chain):
         run_manager: Optional[CallbackManagerForChainRun] = None,
     ) -> Dict[str, Any]:
         _run_manager = run_manager or CallbackManagerForChainRun.get_noop_manager()
-        input_text = f"{inputs[self.input_key]}\nSQLQuery:"
+        input_text = f"{inputs[self.input_key]}\nDSLQuery:"
         _run_manager.on_text(input_text, verbose=self.verbose)
-        # If not present, then defaults to None which is all tables.
-        table_names_to_use = inputs.get("table_names_to_use")
-        table_info = self.database.get_table_info(table_names=table_names_to_use)
+        # If not present, then defaults to None which is all indices.
+        index_names_to_use = inputs.get("index_names_to_use")
+        index_info = self.engine.get_index_info(index_names=index_names_to_use)
         llm_inputs = {
             "input": input_text,
             "top_k": self.top_k,
-            "dialect": self.database.dialect,
-            "table_info": table_info,
-            "stop": ["\nSQLResult:"],
+            "dialect": "es_dsl",
+            "index_info": index_info,
+            "stop": ["\nDSLResult:"],
         }
         intermediate_steps = []
-        sql_cmd = self.llm_chain.predict(
+        dsl_cmd = self.llm_chain.predict(
             callbacks=_run_manager.get_child(), **llm_inputs
         )
-        intermediate_steps.append(sql_cmd)
-        _run_manager.on_text(sql_cmd, color="green", verbose=self.verbose)
-        result = self.database.run(sql_cmd)
+        intermediate_steps.append(dsl_cmd)
+        _run_manager.on_text(dsl_cmd, color="green", verbose=self.verbose)
+        result = self.engine.run(dsl_cmd)
         intermediate_steps.append(result)
-        _run_manager.on_text("\nSQLResult: ", verbose=self.verbose)
+        _run_manager.on_text("\nDSLResult: ", verbose=self.verbose)
         _run_manager.on_text(result, color="yellow", verbose=self.verbose)
-        # If return direct, we just set the final result equal to the sql query
+        # If return direct, we just set the final result equal to the DSL query
         if self.return_direct:
             final_result = result
         else:
             _run_manager.on_text("\nAnswer:", verbose=self.verbose)
-            input_text += f"{sql_cmd}\nSQLResult: {result}\nAnswer:"
+            input_text += f"{dsl_cmd}\nDSLResult: {result}\nAnswer:"
             llm_inputs["input"] = input_text
             final_result = self.llm_chain.predict(
                 callbacks=_run_manager.get_child(), **llm_inputs
@@ -129,33 +129,33 @@ class SQLDatabaseChain(Chain):
 
     @property
     def _chain_type(self) -> str:
-        return "sql_database_chain"
+        return "es_chain"
 
     @classmethod
     def from_llm(
         cls,
         llm: BaseLanguageModel,
-        db: SQLDatabase,
+        engine: ESEngine,
         prompt: Optional[BasePromptTemplate] = None,
         **kwargs: Any,
-    ) -> SQLDatabaseChain:
-        prompt = prompt or SQL_PROMPTS.get(db.dialect, PROMPT)
+    ) -> ESChain:
+        prompt = prompt or ES_PROMPTS.get('es_dsl', PROMPT)
         llm_chain = LLMChain(llm=llm, prompt=prompt)
-        return cls(llm_chain=llm_chain, database=db, **kwargs)
+        return cls(llm_chain=llm_chain, engine=engine, **kwargs)
 
 
-class SQLDatabaseSequentialChain(Chain):
-    """Chain for querying SQL database that is a sequential chain.
+class ESSequentialChain(Chain):
+    """Chain for querying Elasticsearch that is a sequential chain.
 
     The chain is as follows:
-    1. Based on the query, determine which tables to use.
-    2. Based on those tables, call the normal SQL database chain.
+    1. Based on the query, determine which indices to use.
+    2. Based on those indices, call the normal ES chain.
 
-    This is useful in cases where the number of tables in the database is large.
+    This is useful in cases where the number of indices in the ES is large.
     """
 
     decider_chain: LLMChain
-    sql_chain: SQLDatabaseChain
+    es_chain: ESChain
     input_key: str = "query"  #: :meta private:
     output_key: str = "result"  #: :meta private:
     return_intermediate_steps: bool = False
@@ -164,19 +164,19 @@ class SQLDatabaseSequentialChain(Chain):
     def from_llm(
         cls,
         llm: BaseLanguageModel,
-        database: SQLDatabase,
+        engine: ESEngine,
         query_prompt: BasePromptTemplate = PROMPT,
         decider_prompt: BasePromptTemplate = DECIDER_PROMPT,
         **kwargs: Any,
-    ) -> SQLDatabaseSequentialChain:
+    ) -> ESSequentialChain:
         """Load the necessary chains."""
-        sql_chain = SQLDatabaseChain(
-            llm=llm, database=database, prompt=query_prompt, **kwargs
+        es_chain = ESChain(
+            llm=llm, engine=engine, prompt=query_prompt, **kwargs
         )
         decider_chain = LLMChain(
-            llm=llm, prompt=decider_prompt, output_key="table_names"
+            llm=llm, prompt=decider_prompt, output_key="index_names"
         )
-        return cls(sql_chain=sql_chain, decider_chain=decider_chain, **kwargs)
+        return cls(es_chain=es_chain, decider_chain=decider_chain, **kwargs)
 
     @property
     def input_keys(self) -> List[str]:
@@ -203,27 +203,27 @@ class SQLDatabaseSequentialChain(Chain):
         run_manager: Optional[CallbackManagerForChainRun] = None,
     ) -> Dict[str, Any]:
         _run_manager = run_manager or CallbackManagerForChainRun.get_noop_manager()
-        _table_names = self.sql_chain.database.get_usable_table_names()
-        table_names = ", ".join(_table_names)
+        _index_names = self.es_chain.engine.get_usable_index_names()
+        index_names = ", ".join(_index_names)
         llm_inputs = {
             "query": inputs[self.input_key],
-            "table_names": table_names,
+            "index_names": index_names,
         }
-        table_names_to_use = self.decider_chain.predict_and_parse(
+        index_names_to_use = self.decider_chain.predict_and_parse(
             callbacks=_run_manager.get_child(), **llm_inputs
         )
-        _run_manager.on_text("Table names to use:", end="\n", verbose=self.verbose)
+        _run_manager.on_text("Index names to use:", end="\n", verbose=self.verbose)
         _run_manager.on_text(
-            str(table_names_to_use), color="yellow", verbose=self.verbose
+            str(index_names_to_use), color="yellow", verbose=self.verbose
         )
         new_inputs = {
-            self.sql_chain.input_key: inputs[self.input_key],
-            "table_names_to_use": table_names_to_use,
+            self.es_chain.input_key: inputs[self.input_key],
+            "index_names_to_use": index_names_to_use,
         }
-        return self.sql_chain(
+        return self.es_chain(
             new_inputs, callbacks=_run_manager.get_child(), return_only_outputs=True
         )
 
     @property
     def _chain_type(self) -> str:
-        return "sql_database_sequential_chain"
+        return "es_sequential_chain"

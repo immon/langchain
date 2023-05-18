@@ -1,14 +1,13 @@
-# flake8: noqa
 QUERY_CHECKER = """
 {query}
-Double check the {dialect} query above for common mistakes, including:
-- Using NOT IN with NULL values
-- Using UNION when UNION ALL should have been used
-- Using BETWEEN for exclusive ranges
-- Data type mismatch in predicates
-- Properly quoting identifiers
-- Using the correct number of arguments for functions
-- Casting to the correct data type
-- Using the proper columns for joins
+Double check the Elasticsearch query above for common mistakes, including:
+- Properly structuring the query using the correct query DSL
+- Validating the syntax of the query, including correct field names and operators
+- Using appropriate filters and aggregations to retrieve the desired results
+- Ensuring the correct index is being queried
+- Properly configuring the sorting order and pagination
+- Taking advantage of relevant Elasticsearch features like full-text search, analyzers, and mappings
+- Optimizing the query performance by considering query and index optimization techniques
 
-If there are any of the above mistakes, rewrite the query. If there are no mistakes, just reproduce the original query."""
+If there are any mistakes or if the desired results are not achieved, review and modify the query accordingly. If there are no mistakes, proceed with executing the original query on your Elasticsearch cluster.
+"""
