@@ -175,27 +175,22 @@ class ESEngine:
         documents = [hit["_source"] for hit in response["hits"]["hits"]]
         return documents
 
-
-
-
+    def run(self, index_name: str, body: dict) -> dict:
+        return self._connection.search(index=index_name, body=body)
 
     '''
-
-    def run(self, index_name: str, body: dict) -> dict:
-        return self._es.search(index=index_name, body=body)
-
     def get_index_info_no_throw(self, index_name: str) -> str:
         try:
             return self._format_index(index_name)
         except NotFoundError:
             return f"Error: Index {index_name} not found"
+    '''
 
     def run_no_throw(self, index_name: str, body: dict) -> dict:
         try:
             return self.run(index_name, body)
         except Exception as e:
             return {"error": str(e)}
-    '''
 
     def get_index_mapping(self, index_name: str) -> dict:
         response = self._connection.indices.get_mapping(index=index_name)
