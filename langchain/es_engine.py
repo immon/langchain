@@ -199,6 +199,11 @@ class ESEngine:
 
     def get_index_fields(self, index_name: str) -> dict:
         mapping = self.get_index_mapping(index_name)
-        mapping = mapping.get(index_name, {}).get("mappings", {}).get("properties", {})
+        try:
+            first_name = next(iter(mapping))
+        except StopIteration:
+            first_name = None
+
+        mapping = mapping.get(first_name, {}).get("mappings", {}).get("properties", {})
         all_fields = find_fields(mapping)
         return all_fields
