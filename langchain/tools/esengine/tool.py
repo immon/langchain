@@ -1,92 +1,160 @@
-from typing import Any, Dict, Optional
+# flake8: noqa
+"""Tools for interacting with a SQL database."""
+from typing import Any, Dict, Optional, Type
 
-from elasticsearch import Elasticsearch
-from elasticsearch.helpers import scan
-from pydantic import BaseModel, Extra, Field
+from pydantic import BaseModel, Extra, Field, root_validator
 
-class BaseElasticsearchTool(BaseModel):
-    """Base tool for interacting with an Elasticsearch index."""
+import json
 
-    es: Elasticsearch = Field(exclude=True)
+from langchain.base_language import BaseLanguageModel
+from langchain.callbacks.manager import (
+    AsyncCallbackManagerForToolRun,
+    CallbackManagerForToolRun,
+)
+from langchain.chains.llm import LLMChain
+from langchain.prompts import PromptTemplate
+from langchain.es_engine import ESEngine
+from langchain.tools.base import BaseTool
+from langchain.tools.esengine.prompt import QUERY_CHECKER
 
-    class Config:
+
+class BaseElasticsearchDatastoreTool(BaseModel):
+    """Base tool for interacting with a Elasticsearch datastore."""
+
+    db: ESEngine = Field(exclude=True)
+
+    # Override BaseTool.Config to appease mypy
+    # See https://github.com/pydantic/pydantic/issues/4173
+    class Config(BaseTool.Config):
         """Configuration for this pydantic object."""
 
         arbitrary_types_allowed = True
         extra = Extra.forbid
 
 
-class SearchElasticsearchTool(BaseElasticsearchTool):
-    """Tool for searching an Elasticsearch index."""
+class QueryInputSchema(BaseModel):
+    index_name : str = Field(description="should be an index name")
+    query : Dict[str, Any] = Field(description="should be a search query")
 
-    def search(self, index: str, query: str, field: str = "_all"):
-        response = self.es.search(index=index, body={
-            "query": {
-                "match": {field: query}
-            }
-        })
+class QueryElasticsearchDatastoreTool(BaseElasticsearchDatastoreTool, BaseTool):
+    """Tool for querying a Elasticsearch datastore."""
 
-        return response["hits"]["hits"]
+    name = "query_es_db"
+    description = """
+    Input to this tool is an index name to query and detailed and correct Elasticsearch DSL query. The output is a result from the datastore.
+    If the query is not correct, an error message will be returned.
+    If an error is returned, rewrite the query, check the query, and try again.
+    """
+    args_schema: Type[BaseModel] = QueryInputSchema
 
+    def _run(
+        self,
+        index_name: str,
+        query: Dict[str, Any],
+        run_manager: Optional[CallbackManagerForToolRun] = None,
+    ) -> str:
+        """Execute the query, return the results or an error message."""
+        #body = json.loads(query)    # TODO: catch exception
+        return self.db.run(index_name=index_name, body=query)
 
-class ListIndicesElasticsearchTool(BaseElasticsearchTool):
-    """Tool for listing indices."""
-
-    def list_indices(self):
-        indices = self.es.indices.get_alias("*")
-        return list(indices.keys())
-
-
-class GetIndexInfoElasticsearchTool(BaseElasticsearchTool):
-    """Tool for getting index metadata."""
-
-    def get_index_info(self, index: str):
-        index_info = self.es.indices.get(index)
-        return index_info
-
-
-class DeleteIndexElasticsearchTool(BaseElasticsearchTool):
-    """Tool for deleting an index."""
-
-    def delete_index(self, index: str):
-        self.es.indices.delete(index=index)
+    async def _arun(
+        self,
+        index_name: str,
+        query: str,
+        run_manager: Optional[AsyncCallbackManagerForToolRun] = None,
+    ) -> str:
+        raise NotImplementedError("QueryESDbTool does not support async")
 
 
-class CreateIndexElasticsearchTool(BaseElasticsearchTool):
-    """Tool for creating an index."""
+class InfoElasticsearchDatastoreTool(BaseElasticsearchDatastoreTool, BaseTool):
+    """Tool for getting metadata about a Elasticsearch datastore."""
 
-    def create_index(self, index: str, settings: Optional[Dict[str, Any]] = None):
-        if settings:
-            self.es.indices.create(index=index, body=settings)
-        else:
-            self.es.indices.create(index=index)
+    name = "schema_es_db"
+    description = """
+    Input to this tool is a comma-separated list of indices, output is the schema and sample documents for those indices.
+    Be sure that the indices actually exist by calling list_indices_es_db first!
 
+    Example Input: "index1, index2, index3"
+    """
 
-class GetDocumentByIdElasticsearchTool(BaseElasticsearchTool):
-    """Tool for getting a document by ID."""
+    def _run(
+        self,
+        table_names: str,
+        run_manager: Optional[CallbackManagerForToolRun] = None,
+    ) -> str:
+        """Get the schema for indices in a comma-separated list."""
+        return self.db.get_index_info(table_names.split(", "))
 
-    def get_document_by_id(self, index: str, doc_id: str):
-        return self.es.get(index=index, id=doc_id)
-
-
-class DeleteDocumentByIdElasticsearchTool(BaseElasticsearchTool):
-    """Tool for deleting a document by ID."""
-
-    def delete_document_by_id(self, index: str, doc_id: str):
-        return self.es.delete(index=index, id=doc_id)
-
-
-class UpdateDocumentByIdElasticsearchTool(BaseElasticsearchTool):
-    """Tool for updating a document by ID."""
-
-    def update_document_by_id(self, index: str, doc_id: str, doc: Dict[str, Any]):
-        return self.es.update(index=index, id=doc_id, body={"doc": doc})
+    async def _arun(
+        self,
+        table_name: str,
+        run_manager: Optional[AsyncCallbackManagerForToolRun] = None,
+    ) -> str:
+        raise NotImplementedError("SchemaEsDbTool does not support async")
 
 
-class IndexDocumentElasticsearchTool(BaseElasticsearchTool):
-    """Tool for indexing a document."""
+class ListElasticsearchDatastoreTool(BaseElasticsearchDatastoreTool, BaseTool):
+    """Tool for getting index names."""
 
-    def index_document(self, index: str, doc: Dict[str, Any], doc_id: Optional[str] = None):
-        return self.es.index(index=index, id=doc_id, body=doc)
+    name = "list_indices_es_db"
+    description = "Input is an empty string, output is a comma separated list of indices in the datastore."
+
+    def _run(
+        self,
+        tool_input: str = "",
+        run_manager: Optional[CallbackManagerForToolRun] = None,
+    ) -> str:
+        """Get the schema for a specific index."""
+        return ", ".join(self.db.get_usable_index_names())
+
+    async def _arun(
+        self,
+        tool_input: str = "",
+        run_manager: Optional[AsyncCallbackManagerForToolRun] = None,
+    ) -> str:
+        raise NotImplementedError("ListEsDbTool does not support async")
 
 
+class QueryCheckerTool(BaseElasticsearchDatastoreTool, BaseTool):
+    """Use an LLM to check if a query is correct."""
+
+    template: str = QUERY_CHECKER
+    llm: BaseLanguageModel
+    llm_chain: LLMChain = Field(init=False)
+    name = "query_checker_es_db"
+    description = """
+    Use this tool to double check if Elasticsearc query is correct before executing it.
+    Always use this tool before executing a query with query_es_db!
+    """
+
+    @root_validator(pre=True)
+    def initialize_llm_chain(cls, values: Dict[str, Any]) -> Dict[str, Any]:
+        if "llm_chain" not in values:
+            values["llm_chain"] = LLMChain(
+                llm=values.get("llm"),
+                prompt=PromptTemplate(
+                    template=QUERY_CHECKER, input_variables=["query"]
+                ),
+            )
+
+        if values["llm_chain"].prompt.input_variables != ["query"]:
+            raise ValueError(
+                "LLM chain for QueryCheckerTool must have input variables ['query']"
+            )
+
+        return values
+
+    def _run(
+        self,
+        query: str,
+        run_manager: Optional[CallbackManagerForToolRun] = None,
+    ) -> str:
+        """Use the LLM to check the query."""
+        return self.llm_chain.predict(query=query)
+
+    async def _arun(
+        self,
+        query: str,
+        run_manager: Optional[AsyncCallbackManagerForToolRun] = None,
+    ) -> str:
+        return await self.llm_chain.apredict(query=query)

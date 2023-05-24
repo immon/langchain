@@ -10,7 +10,7 @@ from langchain.base_language import BaseLanguageModel
 from langchain.callbacks.manager import CallbackManagerForChainRun
 from langchain.chains.base import Chain
 from langchain.chains.llm import LLMChain
-from langchain.chains.es_engine.prompt import DECIDER_PROMPT, PROMPT, PROMPTS
+from langchain.chains.es_engine.prompt import DECIDER_PROMPT, ES_PROMPT
 from langchain.prompts.base import BasePromptTemplate
 from langchain.es_engine import ESEngine
 
@@ -35,7 +35,8 @@ class ESChain(Chain):
     """[Deprecated] Prompt to use to translate natural language to DSL."""
     top_k: int = 5
     """Number of results to return from the query"""
-    input_key: str = "query"  #: :meta private:
+    index_name_input_key: str = "index_name"  #: :meta private:
+    query_input_key: str = "query"  #: :meta private:
     output_key: str = "result"  #: :meta private:
     return_intermediate_steps: bool = False
     """Whether or not to return the intermediate steps along with the final answer."""
@@ -58,9 +59,7 @@ class ESChain(Chain):
             )
             if "llm_chain" not in values and values["llm"] is not None:
                 engine = values["engine"]
-                prompt = values.get("prompt") or PROMPTS.get(
-                    "es_dsl", PROMPT
-                )
+                prompt = values.get("prompt") or ES_PROMPT
                 values["llm_chain"] = LLMChain(llm=values["llm"], prompt=prompt)
         return values
 
@@ -70,7 +69,7 @@ class ESChain(Chain):
 
         :meta private:
         """
-        return [self.input_key]
+        return [self.index_name_input_key, self.query_input_key]
 
     @property
     def output_keys(self) -> List[str]:
@@ -92,12 +91,12 @@ class ESChain(Chain):
         input_text = f"{inputs[self.input_key]}\nDSLQuery:"
         _run_manager.on_text(input_text, verbose=self.verbose)
         # If not present, then defaults to None which is all indices.
-        index_names_to_use = inputs.get("index_names_to_use")
+        index_names_to_use = inputs.get("index_names")
         index_info = self.engine.get_index_info(index_names=index_names_to_use)
+        _run_manager.on_text(index_info, color="yellow", verbose=self.verbose)
         llm_inputs = {
             "input": input_text,
             "top_k": self.top_k,
-            "dialect": "es_dsl",
             "index_info": index_info,
             "stop": ["\nDSLResult:"],
         }
@@ -139,7 +138,7 @@ class ESChain(Chain):
         prompt: Optional[BasePromptTemplate] = None,
         **kwargs: Any,
     ) -> ESChain:
-        prompt = prompt or ES_PROMPTS.get('es_dsl', PROMPT)
+        prompt = prompt or ES_PROMPT
         llm_chain = LLMChain(llm=llm, prompt=prompt)
         return cls(llm_chain=llm_chain, engine=engine, **kwargs)
 
@@ -156,7 +155,7 @@ class ESSequentialChain(Chain):
 
     decider_chain: LLMChain
     es_chain: ESChain
-    input_key: str = "query"  #: :meta private:
+    query_input_key: str = "query"  #: :meta private:
     output_key: str = "result"  #: :meta private:
     return_intermediate_steps: bool = False
 
@@ -165,7 +164,7 @@ class ESSequentialChain(Chain):
         cls,
         llm: BaseLanguageModel,
         engine: ESEngine,
-        query_prompt: BasePromptTemplate = PROMPT,
+        query_prompt: BasePromptTemplate = ES_PROMPT,
         decider_prompt: BasePromptTemplate = DECIDER_PROMPT,
         **kwargs: Any,
     ) -> ESSequentialChain:
@@ -184,7 +183,7 @@ class ESSequentialChain(Chain):
 
         :meta private:
         """
-        return [self.input_key]
+        return [self.query_input_key]
 
     @property
     def output_keys(self) -> List[str]:
@@ -206,7 +205,7 @@ class ESSequentialChain(Chain):
         _index_names = self.es_chain.engine.get_usable_index_names()
         index_names = ", ".join(_index_names)
         llm_inputs = {
-            "query": inputs[self.input_key],
+            "query": inputs[self.query_input_key],
             "index_names": index_names,
         }
         index_names_to_use = self.decider_chain.predict_and_parse(
@@ -217,9 +216,13 @@ class ESSequentialChain(Chain):
             str(index_names_to_use), color="yellow", verbose=self.verbose
         )
         new_inputs = {
-            self.es_chain.input_key: inputs[self.input_key],
-            "index_names_to_use": index_names_to_use,
+            self.es_chain.query_input_key: inputs[self.query_input_key],
+            self.es_chain.index_name_input_key: index_names_to_use,
         }
+        print(str(new_inputs))
+        _run_manager.on_text(
+            str(new_inputs), color="red", verbose=self.verbose
+        )
         return self.es_chain(
             new_inputs, callbacks=_run_manager.get_child(), return_only_outputs=True
         )

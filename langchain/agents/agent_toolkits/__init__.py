@@ -30,6 +30,8 @@ from langchain.agents.agent_toolkits.vectorstore.toolkit import (
     VectorStoreToolkit,
 )
 from langchain.agents.agent_toolkits.zapier.toolkit import ZapierToolkit
+from langchain.agents.agent_toolkits.elasticsearch.base import create_elasticsearch_agent
+from langchain.agents.agent_toolkits.elasticsearch.toolkit import ElasticsearchDatastoreToolkit
 
 __all__ = [
     "create_json_agent",
@@ -56,4 +58,6 @@ __all__ = [
     "JiraToolkit",
     "FileManagementToolkit",
     "PlayWrightBrowserToolkit",
+    "create_elasticsearch_agent",
+    "ElasticsearchDatastoreToolkit",
 ]

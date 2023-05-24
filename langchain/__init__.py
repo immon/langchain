@@ -16,6 +16,7 @@ from langchain.chains import (
     SQLDatabaseChain,
     VectorDBQA,
     VectorDBQAWithSourcesChain,
+    ESChain,
 )
 from langchain.docstore import InMemoryDocstore, Wikipedia
 from langchain.llms import (

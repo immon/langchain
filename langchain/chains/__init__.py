@@ -31,6 +31,10 @@ from langchain.chains.sql_database.base import (
     SQLDatabaseSequentialChain,
 )
 from langchain.chains.transform import TransformChain
+from langchain.chains.es_engine.base import (
+    ESChain,
+    ESSequentialChain,
+)
 
 __all__ = [
     "ConversationChain",
@@ -63,4 +67,6 @@ __all__ = [
     "RetrievalQAWithSourcesChain",
     "ConversationalRetrievalChain",
     "OpenAPIEndpointChain",
+    "ESChain",
+    "ESSequentialChain",
 ]

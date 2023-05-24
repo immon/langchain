@@ -4,7 +4,6 @@ Double check the Elasticsearch query above for common mistakes, including:
 - Properly structuring the query using the correct query DSL
 - Validating the syntax of the query, including correct field names and operators
 - Using appropriate filters and aggregations to retrieve the desired results
-- Ensuring the correct index is being queried
 - Properly configuring the sorting order and pagination
 - Taking advantage of relevant Elasticsearch features like full-text search, analyzers, and mappings
 - Optimizing the query performance by considering query and index optimization techniques

@@ -100,13 +100,14 @@ class ESEngine:
 
     @classmethod
     def from_uri(
-        cls, hosts: str | None = None, **kwargs: Any
+        cls, hosts: str | None = None, connection_args: Optional[dict] = None, **kwargs: Any
     ) -> ESEngine:
         """Construct a Elasticsearch engine from URI."""
 
-        connection = Elasticsearch(hosts, **kwargs) # http_auth=http_auth, use_ssl=use_ssl)
+        _connection_args = connection_args or {}
+        connection = Elasticsearch(hosts, **_connection_args)
 
-        return cls(connection)
+        return cls(connection, **kwargs)
 
     def get_usable_index_names(self) -> Iterable[str]:
         """Get names of indices available."""
@@ -175,15 +176,10 @@ class ESEngine:
         documents = [hit["_source"] for hit in response["hits"]["hits"]]
         return documents
 
-
-
-
+    def run(self, index_name: str, body: dict) -> dict:
+        return self._connection.search(index=index_name, body=body)
 
     '''
-
-    def run(self, index_name: str, body: dict) -> dict:
-        return self._es.search(index=index_name, body=body)
-
     def get_index_info_no_throw(self, index_name: str) -> str:
         try:
             return self._format_index(index_name)
