@@ -21,7 +21,7 @@ def create_elasticsearch_agent(
     suffix: str = ES_DSL_SUFFIX,
     format_instructions: str = FORMAT_INSTRUCTIONS,
     input_variables: Optional[List[str]] = None,
-    top_k: int = 10,
+    top_k: int = 3,
     max_iterations: Optional[int] = 15,
     max_execution_time: Optional[float] = None,
     early_stopping_method: str = "force",
